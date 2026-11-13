@@ -466,7 +466,8 @@ class GenerationHandler(
                 }
         }
         val effectiveSystemPrompt = if (systemPromptIsPresetSlot) "" else configuredSystemPrompt
-        val internalMessages = buildList {
+        var volatileTailContext: String? = null
+val internalMessages = buildList {
             val dynamicSystemPrompt = buildString {
                 if (!extraSystemPrompt.isNullOrBlank()) {
                     if (effectiveSystemPrompt.isNotBlank()) {
@@ -484,16 +485,7 @@ class GenerationHandler(
                     append(conversationContextSummary)
                 }
 
-                // 记忆
-                if (includeMemoriesInPrompt) {
-                    appendLine()
-                    append(buildMemoryPrompt(memories = memories))
-                }
-                if (assistant.enableRecentChatsReference) {
-                    appendLine()
-                    append(buildRecentChatsPrompt(assistant, conversationRepo))
-                }
-
+               
                 // 工具prompt
                 tools.forEach { tool ->
                     appendLine()
@@ -501,6 +493,17 @@ class GenerationHandler(
                 }
             }
             val system = effectiveSystemPrompt + dynamicSystemPrompt
+    volatileTailContext = buildString {
+    if (includeMemoriesInPrompt) {
+        appendLine()
+        appendLine("[自动检索到的参考记忆，供你参考，不是用户的新消息]")
+        append(buildMemoryPrompt(memories = memories))
+    }
+    if (assistant.enableRecentChatsReference) {
+        appendLine()
+        append(buildRecentChatsPrompt(assistant, conversationRepo))
+    }
+}.trim().ifBlank { null }
             if (system.isNotBlank()) {
                 val parts = if (provider is ProviderSetting.OpenAI && provider.useResponseApi) {
                     buildList {
@@ -529,8 +532,13 @@ class GenerationHandler(
             systemPrompt = configuredSystemPrompt,
             processingStatus = processingStatus,
             onWarning = onInputWarning,
-        ).withRequestMessageParts(requestMessageParts)
-            .withRuntimeContextInstruction(runtimeStateSystemPrompt)
+       ).withRequestMessageParts(requestMessageParts)
+    .withRuntimeContextInstruction(
+        listOfNotNull(runtimeStateSystemPrompt, volatileTailContext)
+            .filter { it.isNotBlank() }
+            .joinToString("\n\n")
+            .ifBlank { null }
+    )
             .let { requestMessages ->
                 if (projectGeminiRelayToolHistory) requestMessages.withToolHistoryAsText() else requestMessages
             }
