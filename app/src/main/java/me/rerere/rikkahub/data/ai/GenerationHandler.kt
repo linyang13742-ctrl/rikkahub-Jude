@@ -493,6 +493,7 @@ val internalMessages = buildList {
                 }
             }
             val system = effectiveSystemPrompt + dynamicSystemPrompt
+    Log.i("CtxCache", "sysLen=${system.length} sysHash=${system.hashCode()} tailLen=${volatileTailContext?.length ?: 0}")
     volatileTailContext = buildString {
     if (includeMemoriesInPrompt) {
         appendLine()
